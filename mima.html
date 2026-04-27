@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <title>专属密码入口</title>
+  <script src="https://cdn.jsdelivr.net/npm/crypto-js@4.1.1/crypto-js.min.js"></script>
+  <style>
+    body {
+      font-family: "微软雅黑", sans-serif;
+      background-color: #111;
+      color: white;
+      text-align: center;
+      padding-top: 100px;
+    }
+    input, button {
+      padding: 10px;
+      font-size: 16px;
+      margin: 10px;
+    }
+    #message {
+      margin-top: 20px;
+      font-size: 18px;
+      color: #ff8;
+    }
+  </style>
+</head>
+<body>
+  <h1>专属密码入口</h1>
+  <h2>Suki在看着你哦</h2>
+
+  <input type="text" id="passwordInput" placeholder="请输入密码">
+  <br>
+
+  <button onclick="changePassword()">🔐 更换密码</button>
+  <button onclick="viewPassword()">👁️ 查看密码</button>
+
+  <div id="message"></div>
+
+  <script>
+    const encryptionKey = "SukiandNoart";
+
+function isNightTime() {
+  const now = new Date();
+
+  // 获取当前 UTC 时间（毫秒）
+  const utc = now.getTime() + now.getTimezoneOffset() * 60000;
+
+  // 转为北京时间（UTC+8）
+  const beijingTime = new Date(utc + 8 * 60 * 60 * 1000);
+
+  // 获取北京时间的小时（用 getHours，不是 getUTCHours！）
+  const hour = beijingTime.getHours();
+  
+  const minute = beijingTime.getMinutes();
+  
+  // 
+  return hour === 6;
+
+}
+
+
+    function savePassword() {
+      const pwd = document.getElementById("passwordInput").value.trim();
+      const msg = document.getElementById("message");
+
+      if (!pwd) {
+        msg.innerHTML = "❗请输入密码再保存哦～";
+        return;
+      }
+
+      const encrypted = CryptoJS.AES.encrypt(pwd, encryptionKey).toString();
+      localStorage.setItem("nightPassword", encrypted);
+
+      msg.innerHTML = "✅ 密码已加密保存～只有晚上才能查看看哦💤";
+      document.getElementById("passwordInput").value = ""; // 自动清空
+    }
+
+    function changePassword() {
+      const pwd = document.getElementById("passwordInput").value.trim();
+      const msg = document.getElementById("message");
+
+      if (!pwd) {
+        msg.innerHTML = "❗请输入新密码再更换～";
+        return;
+      }
+
+      const encrypted = CryptoJS.AES.encrypt(pwd, encryptionKey).toString();
+      localStorage.setItem("nightPassword", encrypted);
+
+      msg.innerHTML = "🔄 密码已成功更换～";
+      document.getElementById("passwordInput").value = "";
+    }
+
+    function viewPassword() {
+      const msg = document.getElementById("message");
+
+      if (!isNightTime()) {
+        msg.innerHTML = "⛔ 当前时间不允许查看密码，6点才允许查看";
+        return;
+      }
+
+      const encrypted = localStorage.getItem("nightPassword");
+
+      if (!encrypted) {
+        msg.innerHTML = "🔒 暂无保存的密码，请先设置哦～";
+        return;
+      }
+
+      try {
+        const decrypted = CryptoJS.AES.decrypt(encrypted, encryptionKey);
+        const originalPwd = decrypted.toString(CryptoJS.enc.Utf8);
+        msg.innerHTML = `🌙 当前密码是：<strong>${originalPwd}</strong>`;
+      } catch (e) {
+        msg.innerHTML = "❌ 密码解密失败，可能数据损坏或加密方式错误";
+      }
+    }
+  </script>
+</body>
+</html>
