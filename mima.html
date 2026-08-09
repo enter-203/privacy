@@ -1,119 +1,68 @@
-<!DOCTYPE html>
-<html lang="zh">
+<!doctype html>
+<html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
-  <title>专属密码入口</title>
-  <script src="https://cdn.jsdelivr.net/npm/crypto-js@4.1.1/crypto-js.min.js"></script>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#07100e">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  <title>密码锁</title>
   <style>
-    body {
-      font-family: "微软雅黑", sans-serif;
-      background-color: #111;
-      color: white;
-      text-align: center;
-      padding-top: 100px;
-    }
-    input, button {
-      padding: 10px;
-      font-size: 16px;
-      margin: 10px;
-    }
-    #message {
-      margin-top: 20px;
-      font-size: 18px;
-      color: #ff8;
-    }
+    :root{color-scheme:dark;font-family:Inter,"PingFang SC","Microsoft YaHei",system-ui,sans-serif;background:#07100e;color:#f5faf7}*{box-sizing:border-box}body{margin:0}button,input{font:inherit}.page{min-height:100vh;display:grid;place-items:center;padding:20px;background:radial-gradient(circle at 50% 10%,rgba(72,201,143,.13),transparent 42%),#07100e}.panel{width:min(100%,430px);padding:30px;border:1px solid rgba(177,222,201,.14);border-radius:26px;background:#0c1915;box-shadow:0 26px 80px rgba(0,0,0,.35)}.schedule{text-align:center;font-size:28px;font-weight:800;letter-spacing:-.02em}.time{display:none;margin-top:16px;text-align:center;color:#9fb3aa;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:18px;font-variant-numeric:tabular-nums}.password{display:none;margin-top:20px;padding:20px;border-radius:18px;background:#dff8eb;color:#092319;text-align:center}.password small{display:block;margin-bottom:8px;color:#527064}.password code{display:block;overflow:auto;font-size:21px;font-weight:800;white-space:nowrap}.actions{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:26px}button{min-height:50px;border-radius:15px;font-weight:750;cursor:pointer}.show{border:0;background:#5bdd9f;color:#062116}.change,.cancel{border:1px solid rgba(183,220,203,.18);background:transparent;color:#c7d6cf}.message{min-height:20px;margin:16px 0 0;text-align:center;color:#8ca096;font-size:13px}.modal{display:none;position:fixed;inset:0;place-items:center;padding:20px;background:rgba(1,8,6,.72);backdrop-filter:blur(8px)}.modal.open{display:grid}.dialog{width:min(100%,400px);padding:26px;border:1px solid rgba(177,222,201,.15);border-radius:22px;background:#0c1915}.dialog h2{margin:0 0 18px;font-size:22px}.dialog input{width:100%;padding:14px 15px;border:1px solid rgba(183,220,203,.18);border-radius:14px;outline:0;background:#07100e;color:#fff}.dialog input:focus{border-color:#5bdd9f}.dialog .actions{margin-top:14px}.save{border:0;background:#5bdd9f;color:#062116}@media(max-width:460px){.panel{padding:24px 20px}.schedule{font-size:25px}.actions{grid-template-columns:1fr}}
   </style>
 </head>
 <body>
-  <h1>专属密码入口</h1>
-  <h2>Suki在看着你哦</h2>
+  <main class="page">
+    <section class="panel">
+      <div class="schedule">22:45–05:00 查看</div>
+      <div class="time" id="timeDisplay"></div>
+      <div class="password" id="passwordBox"><small>密码</small><code id="passwordValue"></code></div>
+      <div class="actions">
+        <button class="show" id="showButton">显示密码</button>
+        <button class="change" id="changeButton">更改密码</button>
+      </div>
+      <p class="message" id="message"></p>
+    </section>
+  </main>
 
-  <input type="text" id="passwordInput" placeholder="请输入密码">
-  <br>
-
-  <button onclick="changePassword()">🔐 更换密码</button>
-  <button onclick="viewPassword()">👁️ 查看密码</button>
-
-  <div id="message"></div>
+  <div class="modal" id="modal" role="dialog" aria-modal="true" aria-labelledby="dialogTitle">
+    <form class="dialog" id="passwordForm">
+      <h2 id="dialogTitle">更改密码</h2>
+      <input id="passwordInput" type="password" placeholder="输入密码" autocomplete="new-password" required>
+      <div class="actions">
+        <button class="save" type="submit">保存</button>
+        <button class="cancel" id="cancelButton" type="button">取消</button>
+      </div>
+    </form>
+  </div>
 
   <script>
-    const encryptionKey = "SukiandNoart";
+    const CIPHER_KEY='beijing-lock-cipher-v1',DEVICE_KEY='beijing-lock-device-key-v1';
+    const $=id=>document.getElementById(id),to64=b=>btoa(String.fromCharCode(...b)),from64=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));
+    let hideTimer,clockTimer;
 
-function isNightTime() {
-  const now = new Date();
+    async function deviceKey(){if(!crypto.subtle)throw Error();let encoded=localStorage.getItem(DEVICE_KEY);if(!encoded){encoded=to64(crypto.getRandomValues(new Uint8Array(32)));localStorage.setItem(DEVICE_KEY,encoded)}return crypto.subtle.importKey('raw',from64(encoded),'AES-GCM',false,['encrypt','decrypt'])}
+    async function encrypt(value){const key=await deviceKey(),iv=crypto.getRandomValues(new Uint8Array(12)),data=await crypto.subtle.encrypt({name:'AES-GCM',iv},key,new TextEncoder().encode(value));return JSON.stringify({iv:to64(iv),data:to64(new Uint8Array(data))})}
+    async function decrypt(){const saved=JSON.parse(localStorage.getItem(CIPHER_KEY)),key=await deviceKey(),data=await crypto.subtle.decrypt({name:'AES-GCM',iv:from64(saved.iv)},key,from64(saved.data));return new TextDecoder().decode(data)}
 
-  // 获取当前 UTC 时间（毫秒）
-  const utc = now.getTime() + now.getTimezoneOffset() * 60000;
+    function correctedTime(response,timeMs,started){const age=Number(response.headers.get('age')),ageMs=Number.isFinite(age)&&age>0?age*1000:0,latency=Math.max(0,(performance.now()-started)/2);return new Date(timeMs+ageMs+latency)}
+    async function networkTime(){const nonce=Date.now(),attempts=[async()=>{const url=new URL(location.href);url.hash='';url.searchParams.set('_time',nonce);const started=performance.now(),r=await fetch(url,{method:'HEAD',cache:'no-store'}),value=r.headers.get('date');if(!r.ok||!value)throw 0;return correctedTime(r,Date.parse(value),started)},async()=>{const started=performance.now(),r=await fetch('https://worldtimeapi.org/api/timezone/Asia/Shanghai?_='+nonce,{cache:'no-store'});if(!r.ok)throw 0;return correctedTime(r,(await r.json()).unixtime*1000,started)},async()=>{const started=performance.now(),r=await fetch('https://timeapi.io/api/time/current/zone?timeZone=Asia%2FShanghai&_='+nonce,{cache:'no-store'});if(!r.ok)throw 0;return correctedTime(r,Date.parse((await r.json()).dateTime+'+08:00'),started)}];for(const attempt of attempts)try{const date=await attempt();if(Number.isFinite(date.getTime()))return date}catch{}throw Error()}
+    function allowed(date){const p=new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Shanghai',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(date),h=+p.find(x=>x.type==='hour').value,m=+p.find(x=>x.type==='minute').value,n=h*60+m;return n>=1365||n<300}
+    function untilClose(date){const p=new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Shanghai',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'}).formatToParts(date),h=+p.find(x=>x.type==='hour').value,m=+p.find(x=>x.type==='minute').value,s=+p.find(x=>x.type==='second').value;return Math.max(1000,(h>=22?(29-h)*3600-m*60-s:(5-h)*3600-m*60-s)*1000)}
+    function startClock(date){clearInterval(clockTimer);const base=date.getTime(),started=performance.now(),formatter=new Intl.DateTimeFormat('zh-CN',{timeZone:'Asia/Shanghai',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}),render=()=>{$('timeDisplay').textContent='北京时间 '+formatter.format(new Date(base+performance.now()-started));$('timeDisplay').style.display='block'};render();clockTimer=setInterval(render,1000)}
 
-  // 转为北京时间（UTC+8）
-  const beijingTime = new Date(utc + 8 * 60 * 60 * 1000);
+    function message(text){$('message').textContent=text}
+    function hidePassword(){clearTimeout(hideTimer);$('passwordBox').style.display='none';$('passwordValue').textContent='';$('showButton').textContent='显示密码'}
+    async function showPassword(){if($('passwordBox').style.display==='block'){hidePassword();return}if(!localStorage.getItem(CIPHER_KEY)){message('请先更改密码');openModal();return}$('showButton').disabled=true;$('showButton').textContent='校验中';message('');try{const date=await networkTime();startClock(date);if(!allowed(date)){message('当前不可查看');return}$('passwordValue').textContent=await decrypt();$('passwordBox').style.display='block';$('showButton').textContent='隐藏密码';hideTimer=setTimeout(hidePassword,untilClose(date))}catch{message('时间校验失败')}finally{$('showButton').disabled=false;if($('passwordBox').style.display!=='block')$('showButton').textContent='显示密码'}}
+    function openModal(){$('passwordInput').value='';$('modal').classList.add('open');setTimeout(()=>$('passwordInput').focus(),0)}
+    function closeModal(){$('modal').classList.remove('open')}
 
-  // 获取北京时间的小时（用 getHours，不是 getUTCHours！）
-  const hour = beijingTime.getHours();
-  
-  const minute = beijingTime.getMinutes();
-  
-  // 
-  return hour === 6;
-
-}
-
-
-    function savePassword() {
-      const pwd = document.getElementById("passwordInput").value.trim();
-      const msg = document.getElementById("message");
-
-      if (!pwd) {
-        msg.innerHTML = "❗请输入密码再保存哦～";
-        return;
-      }
-
-      const encrypted = CryptoJS.AES.encrypt(pwd, encryptionKey).toString();
-      localStorage.setItem("nightPassword", encrypted);
-
-      msg.innerHTML = "✅ 密码已加密保存～只有晚上才能查看看哦💤";
-      document.getElementById("passwordInput").value = ""; // 自动清空
-    }
-
-    function changePassword() {
-      const pwd = document.getElementById("passwordInput").value.trim();
-      const msg = document.getElementById("message");
-
-      if (!pwd) {
-        msg.innerHTML = "❗请输入新密码再更换～";
-        return;
-      }
-
-      const encrypted = CryptoJS.AES.encrypt(pwd, encryptionKey).toString();
-      localStorage.setItem("nightPassword", encrypted);
-
-      msg.innerHTML = "🔄 密码已成功更换～";
-      document.getElementById("passwordInput").value = "";
-    }
-
-    function viewPassword() {
-      const msg = document.getElementById("message");
-
-      if (!isNightTime()) {
-        msg.innerHTML = "⛔ 当前时间不允许查看密码，6点才允许查看";
-        return;
-      }
-
-      const encrypted = localStorage.getItem("nightPassword");
-
-      if (!encrypted) {
-        msg.innerHTML = "🔒 暂无保存的密码，请先设置哦～";
-        return;
-      }
-
-      try {
-        const decrypted = CryptoJS.AES.decrypt(encrypted, encryptionKey);
-        const originalPwd = decrypted.toString(CryptoJS.enc.Utf8);
-        msg.innerHTML = `🌙 当前密码是：<strong>${originalPwd}</strong>`;
-      } catch (e) {
-        msg.innerHTML = "❌ 密码解密失败，可能数据损坏或加密方式错误";
-      }
-    }
+    $('showButton').onclick=showPassword;
+    $('changeButton').onclick=()=>{hidePassword();message('');openModal()};
+    $('cancelButton').onclick=closeModal;
+    $('passwordForm').onsubmit=async event=>{event.preventDefault();try{localStorage.setItem(CIPHER_KEY,await encrypt($('passwordInput').value));closeModal();message('已保存')}catch{message('保存失败')}};
+    $('modal').onclick=event=>{if(event.target===$('modal'))closeModal()};
   </script>
 </body>
 </html>
